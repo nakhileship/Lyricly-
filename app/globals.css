@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0d0f12;
+  --foreground: #f1f5f9;
+  --card-bg: #14181f;
+  --card-border: #232936;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.12), transparent),
+    radial-gradient(circle at 100% 100%, rgba(56, 189, 248, 0.04), transparent 40%),
+    radial-gradient(circle at 0% 80%, rgba(245, 158, 11, 0.04), transparent 40%);
+  background-attachment: fixed;
+}
+
+.malayalam-text {
+  font-family: var(--font-noto-malayalam), system-ui, sans-serif;
+  line-height: 1.85;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27303f;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b475c;
+}

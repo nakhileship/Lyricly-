@@ -1,0 +1,334 @@
+import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
+import { GenerationResponse, GenerateRequestBody } from "@/lib/types";
+
+export const runtime = "nodejs";
+
+const EMOTIONAL_DEPTH_INSTRUCTIONS: Record<string, string> = {
+  "heartfelt-raw":
+    "Raw, Heart-Touching & Intimate (ഉള്ള് തൊടുന്ന ഭാവം / ഹൃദയസ്പർശി): Write with genuine vulnerability, emotional weight, and unpretentious human truth. Avoid high-flown abstract clichés; focus on micro-actions, hesitations, and real human details that make the chest ache. Let the emotion feel earned and deeply human.",
+  "bittersweet-longing":
+    "Bittersweet Longing (നൊമ്പരം / വിരഹം): Capture the ache of passing time, distance between people, unsaid goodbyes, and memories triggered by familiar sights or scents specific to this scene.",
+  "contemplative-soulful":
+    "Soulful & Philosophical (ആത്മഗതം / ധ്യാനാത്മകം): Deep and reflective. The specific scene becomes a mirror to life, existence, and the quiet inner landscape of a person.",
+  "warm-comfort":
+    "Warm, Tender & Comforting (ആർദ്രമായ സാന്ത്വനം): A soothing embrace. Convey tenderness, hope, companionship, and the quiet beauty of small shared moments.",
+};
+
+const SONG_ENDING_INSTRUCTIONS: Record<string, string> = {
+  "lingering-fade":
+    "Lingering Fadeout (മാഞ്ഞുപോകുന്ന പര്യവസാനം): The song ends on a haunting, unresolved detail or an unanswered whisper that echoes in the listener's mind like mist fading away.",
+  "emotional-punchline":
+    "Emotional Climax & Final Realization (വൈകാരികമായ പൂർണ്ണത): The Outro delivers a powerful, touching closing realization that ties the entire story together and brings deep emotional closure.",
+  "quiet-acceptance":
+    "Quiet Acceptance & Letting Go (ശാന്തമായ യാത്രാമൊഴി): The song reaches a serene, peaceful resolution — accepting the moment as it is, letting the breath out, and quietly moving forward.",
+};
+
+const POETIC_VIBE_DESCRIPTIONS: Record<string, string> = {
+  "deep-poetic":
+    "Deeply Poetic & Metaphorical (കവിതാത്മകം / ആഴമേറിയ കവിത): Rich literary metaphors, evocative imagery, and melodic cadence inspired by master poets (like ONV Kurup, Rafeeq Ahamed in Malayalam; Gulzar in Hindi/Urdu; Leonard Cohen in English).",
+  "nostalgic-solitary":
+    "Nostalgic & Solitary (ഓർമ്മകളും ഏകാന്തതയും): Wistful, bittersweet atmosphere of passing time, solitude, and quiet yearning.",
+  "romantic-melodic":
+    "Romantic & Soulful (പ്രണയാർദ്രം): Tender romance, gentle touch, emotional intimacy, sweet melodic flow.",
+  "cinematic-storytelling":
+    "Cinematic & Dramatic (സിനിമാറ്റിക്): Narrative progression with atmospheric build, emotional tension, and vivid scene changes.",
+  "folk-pop":
+    "Folk & Contemporary Groove (നാടൻ / ആധുനിക പോപ്പ്): Earthy, organic rhythm, conversational yet deeply poetic expressions, and singable refrains.",
+};
+
+function buildSystemInstruction(
+  targetLanguage: string,
+  poeticVibeKey: string,
+  emotionalDepthKey: string,
+  songEndingKey: string
+): string {
+  const vibeInstruction =
+    POETIC_VIBE_DESCRIPTIONS[poeticVibeKey] ||
+    POETIC_VIBE_DESCRIPTIONS["deep-poetic"];
+
+  const emotionalInstruction =
+    EMOTIONAL_DEPTH_INSTRUCTIONS[emotionalDepthKey] ||
+    EMOTIONAL_DEPTH_INSTRUCTIONS["heartfelt-raw"];
+
+  const endingInstruction =
+    SONG_ENDING_INSTRUCTIONS[songEndingKey] ||
+    SONG_ENDING_INSTRUCTIONS["emotional-punchline"];
+
+  const languageGuidance =
+    targetLanguage && targetLanguage.toLowerCase() !== "auto"
+      ? `COMPOSE IN: **${targetLanguage}** (in its authentic script, e.g. Malayalam script മലയാളം if Malayalam is selected).
+         - Recompose the emotional core, imagery, and unsaid subtext natively into ${targetLanguage}.
+         - Do NOT write a flat literal translation. Compose as an original native poet writing in ${targetLanguage}.`
+      : `COMPOSE DIRECTLY IN THE INPUT LANGUAGE:
+         - If the input is in Malayalam (മലയാളം), write purely in authentic, evocative Malayalam script.
+         - If in English, write in English. If in Manglish, write in Manglish.
+         - Never translate to English before writing lyrics unless explicitly requested.`;
+
+  return `You are a master lyricist, poet, and creative director capable of writing songs with the emotional soul of legendary writers.
+
+Your goal is to transform the user's specific scene into an original, deeply touching, and fully human song.
+
+=== CRITICAL GROUNDING RULES (NEVER DEFAULT TO CLICHÉS) ===
+1. EXCLUSIVE SCENE GROUNDING:
+- You must draw ALL imagery, metaphors, objects, characters, and settings EXCLUSIVELY from the user's prompt.
+- DO NOT import unrelated default elements (e.g. tea stalls, rain, wooden benches, radios, trains, coffee) UNLESS the user explicitly mentioned them in their description!
+- If the user writes about a sunny beach, a classroom, a neon city, a funeral, a newborn baby, a highway drive, or a quiet bedroom, your lyrics MUST inhabit that exact world and only that world.
+- Make every song feel 100% unique to the user's words.
+
+2. HUMAN SUBTEXT & "SHOW, DON'T STATE":
+- BANNED: Do not use generic emotion words like "മനസ്സിൽ ദുഃഖം" ("sadness in my heart"), "I am so happy", or "my heart breaks".
+- INSTEAD: Express feelings through the specific physical objects, glances, silences, textures, and sensory actions inherent to the user's chosen scene.
+- Avoid forced AABB nursery-rhyme patterns. Use fluid human cadence, natural conversational pauses (...), and varied line lengths that breathe.
+
+3. DEFINITIVE TOUCHING ENDING:
+- No aimless wandering. The song must have a clear emotional progression and a memorable, touching [Outro] that provides closure: ${endingInstruction}
+
+4. STYLE & LANGUAGE:
+- Emotional Soul: ${emotionalInstruction}
+- Poetic Tone: ${vibeInstruction}
+- ${languageGuidance}
+
+5. SONG STRUCTURE:
+- [Verse 1] (Establish the specific micro-world and opening physical focus)
+- [Chorus] (The core emotional heartbeat of this scene)
+- [Verse 2] (A shift in perspective, contrast, or deepening realization)
+- [Chorus] (Deeper emotional resonance)
+- [Bridge] (The turning point / rawest vulnerability)
+- [Chorus] (Full emotional culmination)
+- [Outro] (The definitive, touching ending that leaves a lasting impression)
+
+6. MUSIC & VISUAL DIRECTION:
+- Music Direction: Genre, tempo (BPM), instrumentation matching THIS scene, vocal style, and one dense ready-to-paste Suno.ai prompt.
+- Visual Direction: 3-4 named colors with hex codes, visual concept, and one ready-to-paste Midjourney prompt.
+
+Always return strict, valid JSON matching the schema.`;
+}
+
+const geminiResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    detectedLanguage: {
+      type: SchemaType.STRING,
+      description: "The language detected in the input (e.g., 'Malayalam', 'English')",
+    },
+    targetLanguage: {
+      type: SchemaType.STRING,
+      description: "The language the lyrics were written in",
+    },
+    poeticVibe: {
+      type: SchemaType.STRING,
+      description: "The poetic vibe applied",
+    },
+    emotionalDepth: {
+      type: SchemaType.STRING,
+      description: "The emotional depth mode applied",
+    },
+    songEnding: {
+      type: SchemaType.STRING,
+      description: "The ending resolution style applied",
+    },
+    lyrics: {
+      type: SchemaType.STRING,
+      description: "The complete, emotionally touching song lyrics tailored strictly to the scene",
+    },
+    music: {
+      type: SchemaType.OBJECT,
+      properties: {
+        genre: { type: SchemaType.STRING, description: "Specific musical genre" },
+        tempo: { type: SchemaType.STRING, description: "Tempo with BPM and rhythmic feel" },
+        instrumentation: { type: SchemaType.STRING, description: "Key instruments used" },
+        vocalStyle: { type: SchemaType.STRING, description: "Suggested vocal timbre and style" },
+        sunoPrompt: {
+          type: SchemaType.STRING,
+          description: "Dense comma-separated tags ready for Suno.ai/Udio",
+        },
+      },
+      required: ["genre", "tempo", "instrumentation", "sunoPrompt"],
+    },
+    visual: {
+      type: SchemaType.OBJECT,
+      properties: {
+        colorPalette: {
+          type: SchemaType.ARRAY,
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              name: { type: SchemaType.STRING, description: "Color name" },
+              hex: { type: SchemaType.STRING, description: "Hex code e.g. '#2A3439'" },
+              role: { type: SchemaType.STRING, description: "Mood or element role" },
+            },
+            required: ["name", "hex"],
+          },
+          description: "3-4 distinct named colors",
+        },
+        imagery: {
+          type: SchemaType.STRING,
+          description: "Artistic concept for album cover art matching this scene",
+        },
+        imagePrompt: {
+          type: SchemaType.STRING,
+          description: "Dense ready-to-paste prompt for Midjourney / DALL-E",
+        },
+      },
+      required: ["colorPalette", "imagery", "imagePrompt"],
+    },
+  },
+  required: ["detectedLanguage", "lyrics", "music", "visual"],
+};
+
+export async function POST(req: NextRequest) {
+  try {
+    const body: GenerateRequestBody = await req.json();
+    const prompt = (body?.prompt || "").trim();
+    const targetLanguage = (body?.targetLanguage || "auto").trim();
+    const poeticVibe = (body?.poeticVibe || "deep-poetic").trim();
+    const emotionalDepth = (body?.emotionalDepth || "heartfelt-raw").trim();
+    const songEnding = (body?.songEnding || "emotional-punchline").trim();
+
+    if (!prompt) {
+      return NextResponse.json(
+        { error: "Please enter a scene or moment description." },
+        { status: 400 }
+      );
+    }
+
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+    if (!geminiKey && !anthropicKey) {
+      return NextResponse.json(
+        {
+          error:
+            "No API key configured. Please set GEMINI_API_KEY or ANTHROPIC_API_KEY in your environment variables (.env.local).",
+        },
+        { status: 500 }
+      );
+    }
+
+    const systemInstruction = buildSystemInstruction(
+      targetLanguage,
+      poeticVibe,
+      emotionalDepth,
+      songEnding
+    );
+    let resultData: GenerationResponse | null = null;
+
+    // 1. Try Gemini
+    if (geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({
+          model: "gemini-3.6-flash",
+          systemInstruction,
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: geminiResponseSchema as any,
+            temperature: 0.9, // Higher temperature so every new user prompt gets a fresh, unanchored creative output
+          },
+        });
+
+        const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
+"""
+${prompt}
+"""
+
+TARGET SPECIFICATIONS:
+- Output Language: ${targetLanguage}
+- Poetic Vibe: ${poeticVibe}
+- Emotional Soul: ${emotionalDepth}
+- Ending Style: ${songEnding}
+
+CRITICAL EXECUTION RULE:
+Compose a song born 100% OUT OF THE USER'S SCENE ABOVE.
+Do NOT default to tea stalls, rain, or wooden benches unless specifically mentioned above.
+Use the unique sights, objects, actions, and atmosphere of THIS scene.
+Deliver human-touching lyrics with subtle subtext and an [Outro] that provides true closure.
+Return strict JSON.`;
+
+        const response = await model.generateContent(promptText);
+        const text = response.response.text();
+        if (text) {
+          resultData = JSON.parse(text) as GenerationResponse;
+          resultData.targetLanguage = targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
+          resultData.poeticVibe = poeticVibe;
+          resultData.emotionalDepth = emotionalDepth;
+          resultData.songEnding = songEnding;
+        }
+      } catch (geminiError: any) {
+        console.error("Gemini API error:", geminiError);
+        if (!anthropicKey) {
+          throw new Error(geminiError?.message || "Gemini generation failed");
+        }
+      }
+    }
+
+    // 2. Try Anthropic Claude Fallback
+    if (!resultData && anthropicKey) {
+      const anthropic = new Anthropic({ apiKey: anthropicKey });
+      const claudeMsg = await anthropic.messages.create({
+        model: "claude-3-7-sonnet-20250219",
+        max_tokens: 3000,
+        temperature: 0.9,
+        system: `${systemInstruction}\n\nYou must reply ONLY with a valid JSON object matching this structure:
+{
+  "detectedLanguage": string,
+  "targetLanguage": string,
+  "poeticVibe": string,
+  "emotionalDepth": string,
+  "songEnding": string,
+  "lyrics": string,
+  "music": {
+    "genre": string,
+    "tempo": string,
+    "instrumentation": string,
+    "vocalStyle": string,
+    "sunoPrompt": string
+  },
+  "visual": {
+    "colorPalette": [
+      { "name": string, "hex": string, "role": string }
+    ],
+    "imagery": string,
+    "imagePrompt": string
+  }
+}`,
+        messages: [
+          {
+            role: "user",
+            content: `User Scene Description:\n"""\n${prompt}\n"""\n\nCompose a song strictly tailored to this unique scene, avoiding generic tropes. Return strict JSON.`,
+          },
+        ],
+      });
+
+      const firstContent = claudeMsg.content[0];
+      if (firstContent.type === "text") {
+        const cleaned = firstContent.text
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```$/i, "")
+          .trim();
+        resultData = JSON.parse(cleaned) as GenerationResponse;
+      }
+    }
+
+    if (!resultData) {
+      return NextResponse.json(
+        { error: "Failed to generate content from AI model." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(resultData);
+  } catch (error: any) {
+    console.error("Generate API error:", error);
+    return NextResponse.json(
+      {
+        error:
+          error?.message ||
+          "An unexpected error occurred while generating your song. Please check your API key and try again.",
+      },
+      { status: 500 }
+    );
+  }
+}
