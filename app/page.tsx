@@ -33,6 +33,10 @@ import {
   Trash2,
   ExternalLink,
   ChevronUp,
+  Mic,
+  Radio,
+  Disc,
+  Zap,
 } from "lucide-react";
 import { GenerationResponse } from "@/lib/types";
 
@@ -75,6 +79,69 @@ const TARGET_LANGUAGES = [
   { id: "Arabic", label: "Arabic (العربية)" },
   { id: "Japanese", label: "Japanese (日本語)" },
   { id: "German", label: "German (Deutsch)" },
+];
+
+const SONG_TYPES = [
+  {
+    id: "auto",
+    name: "Auto (AI Best Fit)",
+    sub: "Matches scene rhythm",
+    icon: Sparkles,
+  },
+  {
+    id: "indie-acoustic",
+    name: "Indie / Acoustic",
+    sub: "Warm guitars, organic intimacy",
+    icon: Music2,
+  },
+  {
+    id: "rap-hiphop",
+    name: "Rap / Hip-Hop",
+    sub: "Rhythmic flow & 16-bar verses",
+    icon: Mic,
+  },
+  {
+    id: "melody-ghazal",
+    name: "Melody / Ghazal",
+    sub: "ഭാവഗീതം / Soaring classical melody",
+    icon: Radio,
+  },
+  {
+    id: "pop-synth",
+    name: "Pop / Synth-Pop",
+    sub: "Catchy anthemic hooks",
+    icon: Disc,
+  },
+  {
+    id: "rock-alternative",
+    name: "Rock / Alternative",
+    sub: "Gritty guitars & live energy",
+    icon: Zap,
+  },
+  {
+    id: "rnb-soul",
+    name: "R&B / Soul",
+    sub: "Lush chords, groove & melisma",
+    icon: Heart,
+  },
+  {
+    id: "lofi-chill",
+    name: "Lo-Fi / Chillhop",
+    sub: "Dusty vinyl, laid-back loops",
+    icon: Coffee,
+  },
+  {
+    id: "electronic-edm",
+    name: "EDM / Electronic",
+    sub: "High energy, synth builds",
+    icon: Sliders,
+  },
+  {
+    id: "reggae-dub",
+    name: "Reggae / Dub",
+    sub: "Offbeat skank & deep basslines",
+    icon: Music,
+  },
 ];
 
 const POETIC_VIBES = [
@@ -163,6 +230,7 @@ export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("auto");
   const [customLanguage, setCustomLanguage] = useState("");
+  const [songType, setSongType] = useState("auto");
   const [poeticVibe, setPoeticVibe] = useState("deep-poetic");
   const [emotionalDepth, setEmotionalDepth] = useState("heartfelt-raw");
   const [songEnding, setSongEnding] = useState("emotional-punchline");
@@ -221,6 +289,7 @@ export default function Home() {
     setPrompt(item.prompt);
     setLastGeneratedPrompt(item.prompt);
     setResult(item.result);
+    if (item.result.songType) setSongType(item.result.songType);
     setShowHistory(false);
     setTimeout(() => {
       resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -249,6 +318,7 @@ LYRICLY — SONG CREATION EXPORT
 ================================================
 Scene: ${lastGeneratedPrompt}
 Language: ${result.targetLanguage || result.detectedLanguage}
+Song Type / Genre: ${result.songType || songType}
 Poetic Vibe: ${result.poeticVibe || "Deep Poetry"}
 Emotional Depth: ${result.emotionalDepth || "Heartfelt"}
 Ending Style: ${result.songEnding || "Closure"}
@@ -312,6 +382,7 @@ ${result.visual.imagePrompt}
         body: JSON.stringify({
           prompt: trimmed,
           targetLanguage: effectiveTargetLanguage,
+          songType,
           poeticVibe,
           emotionalDepth,
           songEnding,
@@ -353,6 +424,7 @@ ${result.visual.imagePrompt}
     }
   };
 
+  const activeSongType = SONG_TYPES.find((s) => s.id === songType) || SONG_TYPES[0];
   const activeVibe = POETIC_VIBES.find((v) => v.id === poeticVibe) || POETIC_VIBES[0];
   const activeDepth = EMOTIONAL_DEPTHS.find((d) => d.id === emotionalDepth) || EMOTIONAL_DEPTHS[0];
 
@@ -363,7 +435,7 @@ ${result.visual.imagePrompt}
         <div className="flex items-center justify-center gap-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium tracking-wide">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Human-Heart Songwriting Engine • Malayalam Priority</span>
+            <span>Multi-Genre Songwriting Engine • Malayalam Priority</span>
           </div>
 
           {history.length > 0 && (
@@ -388,7 +460,7 @@ ${result.visual.imagePrompt}
         </h1>
 
         <p className="text-slate-400 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
-          Craft touching, organic song lyrics with human depth, subtext, and definitive endings.
+          Craft touching, organic song lyrics in any genre — from <strong>Rap & Hip-Hop</strong> to <strong>Indie Acoustic</strong>, <strong>Melody / Ghazal</strong>, and <strong>Pop</strong>.
           Write in any language, output in any language, with Suno music tags and Midjourney cover art.
         </p>
       </header>
@@ -418,7 +490,7 @@ ${result.visual.imagePrompt}
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
                   <span>{new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <span className="text-amber-400/90 font-medium">
-                    {item.result.targetLanguage || item.result.detectedLanguage}
+                    {item.result.songType || item.result.targetLanguage || item.result.detectedLanguage}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 font-medium truncate malayalam-text">
@@ -473,19 +545,71 @@ ${result.visual.imagePrompt}
             </div>
           </div>
 
-          {/* Controls: Target Language & Poetic Vibe */}
+          {/* Song Type / Musical Genre Selector */}
+          <div className="pt-2 border-t border-[#1f2737] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <Music2 className="w-3.5 h-3.5 text-sky-400" />
+                <span>Song Type / Genre (സംഗീത ശൈലി)</span>
+              </label>
+
+              <span className="text-[11px] text-slate-400">
+                Current: <strong className="text-sky-300">{activeSongType.name}</strong>
+              </span>
+            </div>
+
+            {/* Quick Genre Selection Pills */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+              {SONG_TYPES.map((type) => {
+                const Icon = type.icon;
+                const isSelected = songType === type.id;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    onClick={() => setSongType(type.id)}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                      isSelected
+                        ? "bg-gradient-to-b from-sky-500/20 to-transparent border-sky-500/60 shadow-lg shadow-sky-500/10"
+                        : "bg-[#10151f] border-[#222a3a] hover:border-[#2f3b52] text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon
+                        className={`w-3.5 h-3.5 ${
+                          isSelected ? "text-sky-400" : "text-slate-500"
+                        }`}
+                      />
+                      <span
+                        className={`text-xs font-semibold truncate ${
+                          isSelected ? "text-sky-200" : "text-slate-300"
+                        }`}
+                      >
+                        {type.name.split("/")[0].trim()}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 line-clamp-1">
+                      {type.sub}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Controls: Target Language & Song Ending */}
           <div className="pt-2 border-t border-[#1f2737] grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Output Language Selector */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <Languages className="w-3.5 h-3.5 text-sky-400" /> Output Lyrics Language
+                <Languages className="w-3.5 h-3.5 text-amber-400" /> Output Lyrics Language
               </label>
 
               <div className="relative">
                 <select
                   value={targetLanguage}
                   onChange={(e) => setTargetLanguage(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#263145] text-slate-200 rounded-xl px-3 py-2.5 text-xs md:text-sm appearance-none outline-none focus:border-sky-500/50 transition cursor-pointer"
+                  className="w-full bg-[#0d1117] border border-[#263145] text-slate-200 rounded-xl px-3 py-2.5 text-xs md:text-sm appearance-none outline-none focus:border-amber-500/50 transition cursor-pointer"
                 >
                   {TARGET_LANGUAGES.map((lang) => (
                     <option key={lang.id} value={lang.id} className="bg-[#0d1117] text-slate-200">
@@ -505,7 +629,7 @@ ${result.visual.imagePrompt}
                   placeholder="Type target language (e.g. Italian, Bengali...)"
                   value={customLanguage}
                   onChange={(e) => setCustomLanguage(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#263145] rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
+                  className="w-full bg-[#0d1117] border border-[#263145] rounded-xl px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-amber-500/50"
                 />
               )}
             </div>
@@ -573,7 +697,7 @@ ${result.visual.imagePrompt}
           <div className="space-y-1.5">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
               <Feather className="w-3 h-3 text-amber-400" />
-              <span>Poetry Vibe & Rhythm:</span>
+              <span>Poetry Vibe:</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
               {POETIC_VIBES.map((vibe) => {
@@ -634,7 +758,7 @@ ${result.visual.imagePrompt}
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Composing touching lyrics...</span>
+                    <span>Composing {activeSongType.name} song...</span>
                   </>
                 ) : (
                   <>
@@ -713,6 +837,9 @@ ${result.visual.imagePrompt}
                 <div>
                   <h2 className="text-xl font-bold text-slate-100">Song Lyrics</h2>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5">
+                    <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 font-medium border border-sky-500/20">
+                      {result.songType || activeSongType.name}
+                    </span>
                     <span className="px-2 py-0.5 rounded bg-[#1e2638] text-amber-300 font-medium">
                       {result.targetLanguage || result.detectedLanguage}
                     </span>
@@ -956,7 +1083,7 @@ ${result.visual.imagePrompt}
 
       {/* Calm Footer */}
       <footer className="text-center pt-8 border-t border-[#1d2433] text-xs text-slate-500 space-y-2">
-        <p>Lyricly — Heartfelt, human-crafted lyrics in your chosen language with AI music & cover art direction.</p>
+        <p>Lyricly — Multi-genre lyrics & direction in your chosen language with AI music & cover art.</p>
         <p className="text-[11px] text-slate-600">
           Tip: On Suno.ai, switch to Custom Mode, paste lyrics into the Lyrics box, and tags into Style of Music.
         </p>

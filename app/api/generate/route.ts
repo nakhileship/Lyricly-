@@ -5,6 +5,82 @@ import { GenerationResponse, GenerateRequestBody } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+const SONG_TYPE_INSTRUCTIONS: Record<
+  string,
+  { label: string; instruction: string; structure: string }
+> = {
+  auto: {
+    label: "Auto (AI Best Fit)",
+    instruction:
+      "Select the musical genre that most naturally matches the emotion, pacing, and mood of the described scene.",
+    structure:
+      "[Verse 1] (Setting the scene), [Chorus] (Core emotional theme), [Verse 2] (Deeper shift), [Chorus], [Bridge] (Peak revelation), [Chorus], [Outro] (Poignant resolution)",
+  },
+  "indie-acoustic": {
+    label: "Indie / Acoustic Folk",
+    instruction:
+      "Indie / Acoustic Folk: Warm acoustic guitars, fingerpicking, intimate and vulnerable vocal delivery, organic percussion, rich poetic subtext, unvarnished human truth.",
+    structure:
+      "[Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus], [Outro]",
+  },
+  "rap-hiphop": {
+    label: "Rap / Hip-Hop",
+    instruction:
+      "Rap / Hip-Hop: Hard-hitting rhythmic flow, internal rhymes, multisyllabic rhyme schemes, punchy cadence, wordplay, and a catchy melodic hook. In Malayalam or South Asian languages, incorporate authentic street rhythm, syncopated flow, and real storytelling cadence.",
+    structure:
+      "[Intro], [Verse 1 (16 bars)], [Hook / Chorus], [Verse 2 (16 bars)], [Hook / Chorus], [Bridge / Beat Switch], [Hook / Chorus], [Outro]",
+  },
+  "melody-ghazal": {
+    label: "Melody / Classical / Ghazal",
+    instruction:
+      "Melodic / Classical / Ghazal (ഭാവഗീതം / ഗസൽ / മെലഡി): Flowing melodious lines, classical raga/scale sensibilities, expressive poetic meters, soaring emotive vocal phrasing, gentle traditional orchestration (violins, flutes, sitar/tabla).",
+    structure:
+      "[Pallavi / Chorus], [Anupallavi / Verse 1], [Pallavi], [Charanam / Verse 2], [Pallavi], [Outro]",
+  },
+  "pop-synth": {
+    label: "Pop / Synth-Pop",
+    instruction:
+      "Pop / Synth-Pop: Radio-ready anthemic hooks, driving upbeat pulse or modern 80s synth textures, memorable rhythmic bounce, dynamic pre-chorus builds, and irresistible singalong choruses.",
+    structure:
+      "[Verse 1], [Pre-Chorus], [Chorus], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Chorus], [Outro]",
+  },
+  "rock-alternative": {
+    label: "Rock / Alternative",
+    instruction:
+      "Rock / Alternative: Gritty energy, driving live drums, raw electric guitar riffs, passionate and expressive vocal power, dynamic contrast between moody verses and explosive choruses.",
+    structure:
+      "[Intro], [Verse 1], [Chorus], [Verse 2], [Chorus], [Guitar Solo / Bridge], [Chorus], [Outro]",
+  },
+  "rnb-soul": {
+    label: "R&B / Soul",
+    instruction:
+      "R&B / Soul: Smooth laid-back groove, lush seventh chords, melismatic vocal runs, deep emotional pocket, sensual or vulnerable romantic confession.",
+    structure:
+      "[Verse 1], [Pre-Chorus], [Chorus], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Chorus], [Outro]",
+  },
+  "lofi-chill": {
+    label: "Lo-Fi / Chillhop",
+    instruction:
+      "Lo-Fi / Chillhop: Mellow, relaxed, dusty vinyl warmth, laid-back jazzy chords, whispered or spoken-sung intimate cadence, nostalgic loop vibes.",
+    structure:
+      "[Verse 1], [Hook], [Verse 2], [Hook], [Outro]",
+  },
+  "electronic-edm": {
+    label: "EDM / Electronic",
+    instruction:
+      "EDM / Electronic: Hypnotic synthesizer sequences, rising energy, euphoric drops, rhythmic vocal hooks, and high-energy propulsion.",
+    structure:
+      "[Verse 1], [Build-up], [Drop / Chorus], [Verse 2], [Build-up], [Drop / Chorus], [Outro]",
+  },
+  "reggae-dub": {
+    label: "Reggae / Dub",
+    instruction:
+      "Reggae / Dub: Relaxed offbeat guitar skank, deep rolling bassline, conscious or chilled sunny storytelling, rhythmic vocal delivery.",
+    structure:
+      "[Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Chorus], [Outro]",
+  },
+};
+
 const EMOTIONAL_DEPTH_INSTRUCTIONS: Record<string, string> = {
   "heartfelt-raw":
     "Raw, Heart-Touching & Intimate (ഉള്ള് തൊടുന്ന ഭാവം / ഹൃദയസ്പർശി): Write with genuine vulnerability, emotional weight, and unpretentious human truth. Avoid high-flown abstract clichés; focus on micro-actions, hesitations, and real human details that make the chest ache. Let the emotion feel earned and deeply human.",
@@ -40,10 +116,14 @@ const POETIC_VIBE_DESCRIPTIONS: Record<string, string> = {
 
 function buildSystemInstruction(
   targetLanguage: string,
+  songTypeKey: string,
   poeticVibeKey: string,
   emotionalDepthKey: string,
   songEndingKey: string
 ): string {
+  const songTypeInfo =
+    SONG_TYPE_INSTRUCTIONS[songTypeKey] || SONG_TYPE_INSTRUCTIONS["auto"];
+
   const vibeInstruction =
     POETIC_VIBE_DESCRIPTIONS[poeticVibeKey] ||
     POETIC_VIBE_DESCRIPTIONS["deep-poetic"];
@@ -66,9 +146,9 @@ function buildSystemInstruction(
          - If in English, write in English. If in Manglish, write in Manglish.
          - Never translate to English before writing lyrics unless explicitly requested.`;
 
-  return `You are a master lyricist, poet, and creative director capable of writing songs with the emotional soul of legendary writers.
+  return `You are a master lyricist, poet, and creative musical director capable of writing songs across diverse genres with the emotional soul of legendary writers.
 
-Your goal is to transform the user's specific scene into an original, deeply touching, and fully human song.
+Your goal is to transform the user's specific scene into an original, deeply touching, and fully human song in the chosen musical style.
 
 === CRITICAL GROUNDING RULES (NEVER DEFAULT TO CLICHÉS) ===
 1. EXCLUSIVE SCENE GROUNDING:
@@ -77,30 +157,29 @@ Your goal is to transform the user's specific scene into an original, deeply tou
 - If the user writes about a sunny beach, a classroom, a neon city, a funeral, a newborn baby, a highway drive, or a quiet bedroom, your lyrics MUST inhabit that exact world and only that world.
 - Make every song feel 100% unique to the user's words.
 
-2. HUMAN SUBTEXT & "SHOW, DON'T STATE":
+2. MUSICAL GENRE & SONG TYPE:
+- Chosen Genre / Style: **${songTypeInfo.label}**
+- Genre Directive: ${songTypeInfo.instruction}
+- Recommended Song Architecture: ${songTypeInfo.structure}
+- If Rap/Hip-Hop is selected, write rhythmic, bar-based lyrical flow with internal rhymes and a hard-hitting or melodic hook.
+- If Melody/Ghazal is selected, write with soaring, classical poetic meters and emotional grace.
+- If Indie/Folk is selected, write with intimate, acoustic folk lyricism.
+
+3. HUMAN SUBTEXT & "SHOW, DON'T STATE":
 - BANNED: Do not use generic emotion words like "മനസ്സിൽ ദുഃഖം" ("sadness in my heart"), "I am so happy", or "my heart breaks".
 - INSTEAD: Express feelings through the specific physical objects, glances, silences, textures, and sensory actions inherent to the user's chosen scene.
 - Avoid forced AABB nursery-rhyme patterns. Use fluid human cadence, natural conversational pauses (...), and varied line lengths that breathe.
 
-3. DEFINITIVE TOUCHING ENDING:
+4. DEFINITIVE TOUCHING ENDING:
 - No aimless wandering. The song must have a clear emotional progression and a memorable, touching [Outro] that provides closure: ${endingInstruction}
 
-4. STYLE & LANGUAGE:
+5. STYLE & LANGUAGE:
 - Emotional Soul: ${emotionalInstruction}
 - Poetic Tone: ${vibeInstruction}
 - ${languageGuidance}
 
-5. SONG STRUCTURE:
-- [Verse 1] (Establish the specific micro-world and opening physical focus)
-- [Chorus] (The core emotional heartbeat of this scene)
-- [Verse 2] (A shift in perspective, contrast, or deepening realization)
-- [Chorus] (Deeper emotional resonance)
-- [Bridge] (The turning point / rawest vulnerability)
-- [Chorus] (Full emotional culmination)
-- [Outro] (The definitive, touching ending that leaves a lasting impression)
-
 6. MUSIC & VISUAL DIRECTION:
-- Music Direction: Genre, tempo (BPM), instrumentation matching THIS scene, vocal style, and one dense ready-to-paste Suno.ai prompt.
+- Music Direction: Genre (strictly matching ${songTypeInfo.label}), tempo (specific BPM), instrumentation matching THIS genre and scene, vocal style, and one dense ready-to-paste Suno.ai prompt.
 - Visual Direction: 3-4 named colors with hex codes, visual concept, and one ready-to-paste Midjourney prompt.
 
 Always return strict, valid JSON matching the schema.`;
@@ -117,6 +196,10 @@ const geminiResponseSchema = {
       type: SchemaType.STRING,
       description: "The language the lyrics were written in",
     },
+    songType: {
+      type: SchemaType.STRING,
+      description: "The song type/genre applied (e.g., 'Rap / Hip-Hop', 'Indie / Acoustic Folk')",
+    },
     poeticVibe: {
       type: SchemaType.STRING,
       description: "The poetic vibe applied",
@@ -131,7 +214,7 @@ const geminiResponseSchema = {
     },
     lyrics: {
       type: SchemaType.STRING,
-      description: "The complete, emotionally touching song lyrics tailored strictly to the scene",
+      description: "The complete, emotionally touching song lyrics tailored strictly to the scene and genre",
     },
     music: {
       type: SchemaType.OBJECT,
@@ -183,6 +266,7 @@ export async function POST(req: NextRequest) {
     const body: GenerateRequestBody = await req.json();
     const prompt = (body?.prompt || "").trim();
     const targetLanguage = (body?.targetLanguage || "auto").trim();
+    const songType = (body?.songType || "auto").trim();
     const poeticVibe = (body?.poeticVibe || "deep-poetic").trim();
     const emotionalDepth = (body?.emotionalDepth || "heartfelt-raw").trim();
     const songEnding = (body?.songEnding || "emotional-punchline").trim();
@@ -209,6 +293,7 @@ export async function POST(req: NextRequest) {
 
     const systemInstruction = buildSystemInstruction(
       targetLanguage,
+      songType,
       poeticVibe,
       emotionalDepth,
       songEnding
@@ -225,7 +310,7 @@ export async function POST(req: NextRequest) {
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: geminiResponseSchema as any,
-            temperature: 0.9, // Higher temperature so every new user prompt gets a fresh, unanchored creative output
+            temperature: 0.9,
           },
         });
 
@@ -236,12 +321,13 @@ ${prompt}
 
 TARGET SPECIFICATIONS:
 - Output Language: ${targetLanguage}
+- Song Type / Genre: ${songType}
 - Poetic Vibe: ${poeticVibe}
 - Emotional Soul: ${emotionalDepth}
 - Ending Style: ${songEnding}
 
 CRITICAL EXECUTION RULE:
-Compose a song born 100% OUT OF THE USER'S SCENE ABOVE.
+Compose a song born 100% OUT OF THE USER'S SCENE ABOVE in the style of ${songType}.
 Do NOT default to tea stalls, rain, or wooden benches unless specifically mentioned above.
 Use the unique sights, objects, actions, and atmosphere of THIS scene.
 Deliver human-touching lyrics with subtle subtext and an [Outro] that provides true closure.
@@ -251,7 +337,9 @@ Return strict JSON.`;
         const text = response.response.text();
         if (text) {
           resultData = JSON.parse(text) as GenerationResponse;
-          resultData.targetLanguage = targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
+          resultData.targetLanguage =
+            targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
+          resultData.songType = songType;
           resultData.poeticVibe = poeticVibe;
           resultData.emotionalDepth = emotionalDepth;
           resultData.songEnding = songEnding;
@@ -275,6 +363,7 @@ Return strict JSON.`;
 {
   "detectedLanguage": string,
   "targetLanguage": string,
+  "songType": string,
   "poeticVibe": string,
   "emotionalDepth": string,
   "songEnding": string,
@@ -297,7 +386,7 @@ Return strict JSON.`;
         messages: [
           {
             role: "user",
-            content: `User Scene Description:\n"""\n${prompt}\n"""\n\nCompose a song strictly tailored to this unique scene, avoiding generic tropes. Return strict JSON.`,
+            content: `User Scene Description:\n"""\n${prompt}\n"""\n\nCompose a song strictly tailored to this unique scene in the genre of ${songType}, avoiding generic tropes. Return strict JSON.`,
           },
         ],
       });

@@ -21,6 +21,7 @@ export interface VisualDirection {
 export interface GenerationResponse {
   detectedLanguage: string;
   targetLanguage?: string;
+  songType?: string;
   poeticVibe?: string;
   emotionalDepth?: string;
   songEnding?: string;
@@ -32,6 +33,7 @@ export interface GenerationResponse {
 export interface GenerateRequestBody {
   prompt: string;
   targetLanguage?: string;
+  songType?: string;
   poeticVibe?: string;
   emotionalDepth?: string;
   songEnding?: string;
