@@ -95,19 +95,23 @@ async function callGemini(
   systemInstruction: string,
   promptText: string,
   structured: boolean = true
-): Promise<string | null> {
+): Promise<{ text: string | null; error?: string }> {
   const geminiModels = [
     "gemini-3.6-flash",
     "gemini-3.8-flash",
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
   ];
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   let lastError = "";
+  let isQuotaExceeded = false;
 
   for (const modelName of geminiModels) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    if (isQuotaExceeded) break;
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({
@@ -125,16 +129,25 @@ async function callGemini(
         console.log(`Gemini ${modelName} attempt ${attempt}`);
         const response = await model.generateContent(promptText);
         const text = response.response.text();
-        if (text) return text;
+        if (text) return { text };
       } catch (err: any) {
         const msg = err?.message || String(err);
         lastError = msg;
+
+        // Quota check (429)
+        if (msg.includes("429") || msg.includes("quota") || msg.includes("Quota exceeded")) {
+          console.error(`Gemini quota limit reached on ${modelName}`);
+          isQuotaExceeded = true;
+          break; // Stop immediately, no wasteful retries
+        }
+
         const is503 = msg.includes("503") || msg.includes("high demand");
         const is404 = msg.includes("404") || msg.includes("not found");
         if (is404) break; // skip to next model
-        if (is503 && attempt < 3) {
-          console.log(`${modelName} overloaded, retrying in 2s...`);
-          await sleep(2000);
+
+        if (is503 && attempt < 2) {
+          console.log(`${modelName} overloaded, retrying in 1.5s...`);
+          await sleep(1500);
         } else {
           console.error(`${modelName} failed:`, msg.slice(0, 100));
           break;
@@ -143,8 +156,17 @@ async function callGemini(
     }
   }
 
+  let userFriendlyError = "Gemini is under high demand right now. Please wait a moment and try again.";
+  if (isQuotaExceeded) {
+    userFriendlyError =
+      "Daily Gemini API request quota exceeded for this key (Free Tier limit reached).\n\nPlease get a free standard key at https://aistudio.google.com/app/apikey and update GEMINI_API_KEY in .env.local, or add an ANTHROPIC_API_KEY.";
+  } else if (lastError.includes("503") || lastError.includes("high demand")) {
+    userFriendlyError =
+      "Gemini is experiencing heavy traffic right now (503 Service Unavailable). Please wait 30 seconds and click Retry, or configure an API key at https://aistudio.google.com/app/apikey.";
+  }
+
   console.error("All Gemini models failed. Last error:", lastError.slice(0, 200));
-  return null;
+  return { text: null, error: userFriendlyError };
 }
 
 // ─────────────────────────────────────────────
@@ -225,9 +247,12 @@ Return strict valid JSON with the complete song, titles, music direction, visual
 
     // ── STEP 1: Generate initial draft ──────────────────────────
     let rawText: string | null = null;
+    let geminiErrorMessage = "Gemini API error occurred.";
 
     if (geminiKey) {
-      rawText = await callGemini(geminiKey, systemInstruction, userPromptText, true);
+      const geminiRes = await callGemini(geminiKey, systemInstruction, userPromptText, true);
+      rawText = geminiRes.text;
+      if (geminiRes.error) geminiErrorMessage = geminiRes.error;
     }
 
     if (!rawText && anthropicKey) {
@@ -237,14 +262,27 @@ Return strict valid JSON with the complete song, titles, music direction, visual
     if (!rawText) {
       return NextResponse.json(
         {
-          error:
-            "Gemini is under high demand right now. Please wait 1-2 minutes and try again.\n\nTip: Get a standard API key (starts with AIza...) at https://aistudio.google.com/app/apikey for better reliability.",
+          error: geminiErrorMessage,
         },
         { status: 503 }
       );
     }
 
-    let resultData: GenerationResponse = JSON.parse(rawText);
+    const cleanedJson = rawText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    let resultData: GenerationResponse;
+    try {
+      resultData = JSON.parse(cleanedJson);
+    } catch (parseErr: any) {
+      console.error("Failed to parse JSON response:", parseErr?.message);
+      return NextResponse.json(
+        { error: "The AI returned an invalid response structure. Please click Retry." },
+        { status: 502 }
+      );
+    }
 
     // ── STEP 2: Polish pass (self-critique + line rewrite) ─────────
     if (polishPass && resultData.lyrics) {
@@ -260,7 +298,8 @@ Return strict valid JSON with the complete song, titles, music direction, visual
         let polishedLyrics: string | null = null;
 
         if (geminiKey) {
-          polishedLyrics = await callGemini(geminiKey, polishSystem, polishPrompt, false);
+          const polishRes = await callGemini(geminiKey, polishSystem, polishPrompt, false);
+          polishedLyrics = polishRes.text;
         }
         if (!polishedLyrics && anthropicKey) {
           const anthropic = new Anthropic({ apiKey: anthropicKey });

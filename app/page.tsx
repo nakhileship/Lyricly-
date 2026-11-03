@@ -688,10 +688,20 @@ ${result.youtubeMeta.hashtags.join(" ")}
         }),
       });
 
-      const data = await res.json();
+      const rawResponseText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawResponseText);
+      } catch {
+        throw new Error(
+          rawResponseText.length > 0 && rawResponseText.length < 300
+            ? rawResponseText
+            : `The server returned an invalid response (HTTP ${res.status}). Please check your API key.`
+        );
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to generate lyrics. Please try again.");
+        throw new Error(data?.error || `Generation failed (HTTP ${res.status}). Please try again.`);
       }
 
       setResult(data);
