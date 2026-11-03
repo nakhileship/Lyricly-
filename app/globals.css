@@ -23,6 +23,11 @@ body {
   line-height: 1.85;
 }
 
+.multilingual-text {
+  font-family: var(--font-noto-malayalam), 'Noto Sans Devanagari', 'Noto Sans Tamil', 'Noto Sans Telugu', 'Noto Sans Kannada', 'Noto Sans Arabic', 'Noto Sans JP', 'Noto Sans KR', 'Nirmala UI', var(--font-inter), system-ui, sans-serif;
+  line-height: 1.85;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -14,10 +14,20 @@ const notoMalayalam = Noto_Sans_Malayalam({
 });
 
 export const metadata: Metadata = {
-  title: "Lyricly — Scene to Lyrics, Music & Visual Direction",
+  title: "Lyricly — Human-Heart Songwriting in Any Language",
   description:
-    "Describe any moment or scene in any language (especially Malayalam) and generate evocative song lyrics, Suno/Udio music prompts, and album cover art direction.",
-  keywords: ["lyrics generator", "malayalam lyrics", "suno prompt generator", "album art generator", "songwriting ai"],
+    "Describe any scene or moment in any language and get human-sounding lyrics, Suno AI music prompts, and album cover art. Supports Malayalam, Hindi, Tamil, Telugu, Kannada, Arabic, English, Spanish, Korean, Japanese, and more.",
+  keywords: [
+    "lyrics generator",
+    "ai songwriter",
+    "malayalam lyrics",
+    "hindi lyrics",
+    "tamil lyrics",
+    "suno prompt generator",
+    "multilingual lyrics",
+    "album art generator",
+    "songwriting ai",
+  ],
 };
 
 export default function RootLayout({
@@ -27,6 +37,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${notoMalayalam.variable} dark`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+JP:wght@400;600&family=Noto+Sans+KR:wght@400;600&family=Noto+Sans+Kannada:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-screen bg-[#0d0f12] text-[#f1f5f9] font-sans antialiased selection:bg-amber-500/30 selection:text-amber-200">
         {children}
       </body>
