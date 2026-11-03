@@ -300,15 +300,13 @@ export async function POST(req: NextRequest) {
     );
     let resultData: GenerationResponse | null = null;
 
-    // 1. Try Gemini (with model fallback chain)
+    // 1. Try Gemini (smart retry: retries 503 up to 3x, skips 404 models)
     if (geminiKey) {
       const geminiModels = [
-        "gemini-3.8-flash",           // Latest (may have high demand)
-        "gemini-3.6-flash",           // Previous generation
-        "gemini-2.0-flash",           // Stable
-        "gemini-2.0-flash-lite",      // Lighter, more available
-        "gemini-1.5-flash",           // Legacy fallback
-        "gemini-1.5-flash-8b",        // Smallest, highest availability
+        "gemini-3.8-flash",      // Latest
+        "gemini-3.6-flash",      // Previous generation
+        "gemini-2.0-flash",      // Stable
+        "gemini-1.5-flash",      // Legacy
       ];
       const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
 """
@@ -329,53 +327,72 @@ Use the unique sights, objects, actions, and atmosphere of THIS scene.
 Deliver human-touching lyrics with subtle subtext and an [Outro] that provides true closure.
 Return strict JSON.`;
 
+      const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
       let lastGeminiError = "";
+
       for (const modelName of geminiModels) {
         if (resultData) break;
-        try {
-          const genAI = new GoogleGenerativeAI(geminiKey);
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction,
-            generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema: geminiResponseSchema as any,
-              temperature: 0.9,
-            },
-          });
 
-          console.log(`Trying Gemini model: ${modelName}`);
-          const response = await model.generateContent(promptText);
-          const text = response.response.text();
-          if (text) {
-            resultData = JSON.parse(text) as GenerationResponse;
-            resultData.targetLanguage =
-              targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
-            resultData.songType = songType;
-            resultData.poeticVibe = poeticVibe;
-            resultData.emotionalDepth = emotionalDepth;
-            resultData.songEnding = songEnding;
+        // For each model, retry up to 3 times on 503 (high demand)
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const genAI = new GoogleGenerativeAI(geminiKey);
+            const model = genAI.getGenerativeModel({
+              model: modelName,
+              systemInstruction,
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: geminiResponseSchema as any,
+                temperature: 0.9,
+              },
+            });
+
+            console.log(`Trying Gemini model: ${modelName} (attempt ${attempt})`);
+            const response = await model.generateContent(promptText);
+            const text = response.response.text();
+            if (text) {
+              resultData = JSON.parse(text) as GenerationResponse;
+              resultData.targetLanguage =
+                targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
+              resultData.songType = songType;
+              resultData.poeticVibe = poeticVibe;
+              resultData.emotionalDepth = emotionalDepth;
+              resultData.songEnding = songEnding;
+            }
+            break; // success — exit retry loop
+          } catch (geminiError: any) {
+            const errMsg = geminiError?.message || String(geminiError);
+            lastGeminiError = errMsg;
+
+            const is503 = errMsg.includes("503") || errMsg.includes("Service Unavailable") || errMsg.includes("high demand");
+            const is404 = errMsg.includes("404") || errMsg.includes("not found");
+
+            if (is404) {
+              // Model not available for this key — skip to next model immediately
+              console.log(`Gemini model ${modelName} not available for this key (404), skipping.`);
+              break;
+            } else if (is503 && attempt < 3) {
+              // Overloaded — wait 2s and retry same model
+              console.log(`Gemini model ${modelName} overloaded (503), retrying in 2s... (${attempt}/3)`);
+              await sleep(2000);
+            } else {
+              // Other error or max retries reached — move to next model
+              console.error(`Gemini model ${modelName} failed (attempt ${attempt}):`, errMsg);
+              break;
+            }
           }
-        } catch (geminiError: any) {
-          const errMsg = geminiError?.message || String(geminiError);
-          lastGeminiError = errMsg;
-          console.error(`Gemini model ${modelName} failed:`, errMsg);
-          // Continue to next model in chain
         }
       }
 
-      // If all Gemini models failed and no Claude key, throw with the real error
+      // If all Gemini models failed and no Claude key, throw with clear guidance
       if (!resultData && !anthropicKey) {
-        // Provide specific, actionable guidance based on error type
-        let guidance = "Please get a free key at https://aistudio.google.com/app/apikey and update GEMINI_API_KEY in .env.local";
-        if (lastGeminiError.includes("API_KEY_INVALID") || lastGeminiError.includes("400")) {
-          guidance = "Your GEMINI_API_KEY appears to be invalid. Get a fresh key at https://aistudio.google.com/app/apikey and update it in .env.local (or in Vercel Environment Variables).";
-        } else if (lastGeminiError.includes("QUOTA") || lastGeminiError.includes("429")) {
-          guidance = "Your Gemini API quota has been exceeded. Either wait for the quota to reset, or get a new key at https://aistudio.google.com/app/apikey.";
-        } else if (lastGeminiError.includes("503") || lastGeminiError.includes("Service Unavailable")) {
-          guidance = "Gemini is temporarily overloaded. Please wait a minute and try again, or add ANTHROPIC_API_KEY to .env.local as a backup.";
+        let guidance = "👉 Get a new API key at https://aistudio.google.com/app/apikey\nThen update GEMINI_API_KEY in your .env.local file (locally) and in Vercel → Project Settings → Environment Variables (for the live site).";
+        if (lastGeminiError.includes("503") || lastGeminiError.includes("high demand")) {
+          guidance = "Gemini is under high demand right now. Please wait 1–2 minutes and try again.\n\nAlternatively, get a standard API key (starts with AIza...) at https://aistudio.google.com/app/apikey for better reliability.";
+        } else if (lastGeminiError.includes("API_KEY_INVALID") || lastGeminiError.includes("400")) {
+          guidance = "Your API key appears to be invalid.\n👉 Get a valid key at https://aistudio.google.com/app/apikey\nUpdate GEMINI_API_KEY in .env.local (locally) and in Vercel Environment Variables (for the live site).";
         }
-        throw new Error(`Gemini API failed: ${lastGeminiError}\n\n${guidance}`);
+        throw new Error(`${guidance}`);
       }
     }
 
