@@ -303,10 +303,10 @@ export async function POST(req: NextRequest) {
     // 1. Try Gemini (smart retry: retries 503 up to 3x, skips 404 models)
     if (geminiKey) {
       const geminiModels = [
-        "gemini-3.8-flash",      // Latest
-        "gemini-3.6-flash",      // Previous generation
-        "gemini-2.0-flash",      // Stable
-        "gemini-1.5-flash",      // Legacy
+        "gemini-3.6-flash",      // Stable, working
+        "gemini-3.8-flash",      // Latest (may have high demand)
+        "gemini-2.0-flash",      // Fallback
+        "gemini-1.5-flash",      // Legacy fallback
       ];
       const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
 """
