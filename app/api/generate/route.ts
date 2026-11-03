@@ -302,7 +302,14 @@ export async function POST(req: NextRequest) {
 
     // 1. Try Gemini (with model fallback chain)
     if (geminiKey) {
-      const geminiModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const geminiModels = [
+        "gemini-3.8-flash",           // Latest (may have high demand)
+        "gemini-3.6-flash",           // Previous generation
+        "gemini-2.0-flash",           // Stable
+        "gemini-2.0-flash-lite",      // Lighter, more available
+        "gemini-1.5-flash",           // Legacy fallback
+        "gemini-1.5-flash-8b",        // Smallest, highest availability
+      ];
       const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
 """
 ${prompt}
@@ -322,6 +329,7 @@ Use the unique sights, objects, actions, and atmosphere of THIS scene.
 Deliver human-touching lyrics with subtle subtext and an [Outro] that provides true closure.
 Return strict JSON.`;
 
+      let lastGeminiError = "";
       for (const modelName of geminiModels) {
         if (resultData) break;
         try {
@@ -349,14 +357,25 @@ Return strict JSON.`;
             resultData.songEnding = songEnding;
           }
         } catch (geminiError: any) {
-          console.error(`Gemini model ${modelName} failed:`, geminiError?.message || geminiError);
+          const errMsg = geminiError?.message || String(geminiError);
+          lastGeminiError = errMsg;
+          console.error(`Gemini model ${modelName} failed:`, errMsg);
           // Continue to next model in chain
         }
       }
 
-      // If all Gemini models failed and no Claude key, throw
+      // If all Gemini models failed and no Claude key, throw with the real error
       if (!resultData && !anthropicKey) {
-        throw new Error("All Gemini models failed. Please try again later or add ANTHROPIC_API_KEY as a fallback.");
+        // Provide specific, actionable guidance based on error type
+        let guidance = "Please get a free key at https://aistudio.google.com/app/apikey and update GEMINI_API_KEY in .env.local";
+        if (lastGeminiError.includes("API_KEY_INVALID") || lastGeminiError.includes("400")) {
+          guidance = "Your GEMINI_API_KEY appears to be invalid. Get a fresh key at https://aistudio.google.com/app/apikey and update it in .env.local (or in Vercel Environment Variables).";
+        } else if (lastGeminiError.includes("QUOTA") || lastGeminiError.includes("429")) {
+          guidance = "Your Gemini API quota has been exceeded. Either wait for the quota to reset, or get a new key at https://aistudio.google.com/app/apikey.";
+        } else if (lastGeminiError.includes("503") || lastGeminiError.includes("Service Unavailable")) {
+          guidance = "Gemini is temporarily overloaded. Please wait a minute and try again, or add ANTHROPIC_API_KEY to .env.local as a backup.";
+        }
+        throw new Error(`Gemini API failed: ${lastGeminiError}\n\n${guidance}`);
       }
     }
 
