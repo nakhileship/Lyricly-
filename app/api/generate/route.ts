@@ -300,21 +300,10 @@ export async function POST(req: NextRequest) {
     );
     let resultData: GenerationResponse | null = null;
 
-    // 1. Try Gemini
+    // 1. Try Gemini (with model fallback chain)
     if (geminiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({
-          model: "gemini-3.6-flash",
-          systemInstruction,
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: geminiResponseSchema as any,
-            temperature: 0.9,
-          },
-        });
-
-        const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
+      const geminiModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      const promptText = `=== USER'S UNIQUE SCENE DESCRIPTION ===
 """
 ${prompt}
 """
@@ -333,22 +322,41 @@ Use the unique sights, objects, actions, and atmosphere of THIS scene.
 Deliver human-touching lyrics with subtle subtext and an [Outro] that provides true closure.
 Return strict JSON.`;
 
-        const response = await model.generateContent(promptText);
-        const text = response.response.text();
-        if (text) {
-          resultData = JSON.parse(text) as GenerationResponse;
-          resultData.targetLanguage =
-            targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
-          resultData.songType = songType;
-          resultData.poeticVibe = poeticVibe;
-          resultData.emotionalDepth = emotionalDepth;
-          resultData.songEnding = songEnding;
+      for (const modelName of geminiModels) {
+        if (resultData) break;
+        try {
+          const genAI = new GoogleGenerativeAI(geminiKey);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction,
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: geminiResponseSchema as any,
+              temperature: 0.9,
+            },
+          });
+
+          console.log(`Trying Gemini model: ${modelName}`);
+          const response = await model.generateContent(promptText);
+          const text = response.response.text();
+          if (text) {
+            resultData = JSON.parse(text) as GenerationResponse;
+            resultData.targetLanguage =
+              targetLanguage === "auto" ? resultData.detectedLanguage : targetLanguage;
+            resultData.songType = songType;
+            resultData.poeticVibe = poeticVibe;
+            resultData.emotionalDepth = emotionalDepth;
+            resultData.songEnding = songEnding;
+          }
+        } catch (geminiError: any) {
+          console.error(`Gemini model ${modelName} failed:`, geminiError?.message || geminiError);
+          // Continue to next model in chain
         }
-      } catch (geminiError: any) {
-        console.error("Gemini API error:", geminiError);
-        if (!anthropicKey) {
-          throw new Error(geminiError?.message || "Gemini generation failed");
-        }
+      }
+
+      // If all Gemini models failed and no Claude key, throw
+      if (!resultData && !anthropicKey) {
+        throw new Error("All Gemini models failed. Please try again later or add ANTHROPIC_API_KEY as a fallback.");
       }
     }
 
